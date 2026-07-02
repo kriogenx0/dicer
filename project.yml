@@ -1,0 +1,73 @@
+name: Morbid
+options:
+  bundleIdPrefix: com.morbid
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    ENABLE_HARDENED_RUNTIME: true
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: false
+
+targets:
+  MorbidHost:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: MorbidHost
+        excludes:
+          - "Info.plist"
+    info:
+      path: MorbidHost/Info.plist
+    entitlements:
+      path: MorbidHost/MorbidHost.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.morbid.Morbid
+        PRODUCT_NAME: Morbid
+        CODE_SIGN_ENTITLEMENTS: MorbidHost/MorbidHost.entitlements
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        COMBINE_HIDPI_IMAGES: true
+    dependencies:
+      - target: StutterAU
+        embed: true
+        codeSign: true
+
+  StutterAU:
+    type: app-extension
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: StutterAU
+        excludes:
+          - "Info.plist"
+    info:
+      path: StutterAU/Info.plist
+    entitlements:
+      path: StutterAU/StutterAU.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.morbid.Morbid.StutterAU
+        PRODUCT_NAME: StutterAU
+        CODE_SIGN_ENTITLEMENTS: StutterAU/StutterAU.entitlements
+        SKIP_INSTALL: false
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+
+schemes:
+  Morbid:
+    build:
+      targets:
+        MorbidHost: all
+        StutterAU: all
+    run:
+      config: Debug
+      executable: MorbidHost
