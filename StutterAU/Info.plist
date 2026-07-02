@@ -18,5 +18,42 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>AudioComponentBundle</key>
+			<string>com.morbid.Morbid.StutterAU</string>
+			<key>AudioComponents</key>
+			<array>
+				<dict>
+					<key>description</key>
+					<string>Stutter</string>
+					<key>factoryFunction</key>
+					<string>StutterAU.StutterViewController</string>
+					<key>manufacturer</key>
+					<string>Mrbd</string>
+					<key>name</key>
+					<string>Morbid: Stutter</string>
+					<key>sandboxSafe</key>
+					<true/>
+					<key>subtype</key>
+					<string>Stut</string>
+					<key>tags</key>
+					<array>
+						<string>Effects</string>
+					</array>
+					<key>type</key>
+					<string>aufx</string>
+					<key>version</key>
+					<integer>1</integer>
+				</dict>
+			</array>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.AudioUnit-UI</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>StutterAU.StutterViewController</string>
+	</dict>
 </dict>
 </plist>

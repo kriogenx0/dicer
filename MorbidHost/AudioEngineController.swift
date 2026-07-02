@@ -1,31 +1,100 @@
-import AppKit
 import AudioToolbox
 import AVFoundation
-import CoreAudioKit
 import Observation
 
-// AVAudioUnit isn't Sendable-annotated by the SDK, but instantiate(with:options:)
-// only ever calls its completion handler once, from a single background thread.
-extension AVAudioUnit: @retroactive @unchecked Sendable {}
+/// Pulls looped demo audio and feeds it through `StutterAudioUnit`'s render
+/// block on the realtime audio thread. Kept separate from the @MainActor
+/// controller so this state has no actor isolation for the render closure to
+/// cross — the same reasoning as the plain-scalar parameter storage in
+/// StutterAudioUnit itself.
+private final class DemoPlaybackSource: @unchecked Sendable {
+    private let demoBuffer: AVAudioPCMBuffer
+    private let renderBlock: AUInternalRenderBlock
+    private var readPosition: AVAudioFrameCount = 0
+    var isPlaying = false
 
-/// Owns the playback graph (`player -> Stutter effect -> mainMixer -> output`),
-/// loads the AUv3 by component description (must match StutterAU/Info.plist's
-/// AudioComponents entry byte-for-byte), and exposes transport controls plus
-/// the extension's view controller once it's available.
+    init(demoBuffer: AVAudioPCMBuffer, renderBlock: @escaping AUInternalRenderBlock) {
+        self.demoBuffer = demoBuffer
+        self.renderBlock = renderBlock
+    }
+
+    func reset() {
+        readPosition = 0
+    }
+
+    func render(
+        isSilence: UnsafeMutablePointer<ObjCBool>,
+        timestamp: UnsafePointer<AudioTimeStamp>,
+        frameCount: AVAudioFrameCount,
+        audioBufferList: UnsafeMutablePointer<AudioBufferList>
+    ) -> OSStatus {
+        guard isPlaying else {
+            silence(audioBufferList)
+            isSilence.pointee = true
+            return noErr
+        }
+        isSilence.pointee = false
+
+        var actionFlags: AudioUnitRenderActionFlags = []
+        let pullInput: AURenderPullInputBlock = { [self] _, _, frameCount, _, inputData in
+            self.fill(inputData, frameCount: frameCount)
+            return noErr
+        }
+        return renderBlock(&actionFlags, timestamp, frameCount, 0, audioBufferList, nil, pullInput)
+    }
+
+    private func fill(_ abl: UnsafeMutablePointer<AudioBufferList>, frameCount: AVAudioFrameCount) {
+        let destination = UnsafeMutableAudioBufferListPointer(abl)
+        let source = UnsafeMutableAudioBufferListPointer(demoBuffer.mutableAudioBufferList)
+        let totalFrames = demoBuffer.frameLength
+        guard totalFrames > 0 else { return }
+        let bytesPerFrame = MemoryLayout<Float>.size
+
+        var framesWritten: AVAudioFrameCount = 0
+        while framesWritten < frameCount {
+            let framesRemaining = totalFrames - readPosition
+            let framesToCopy = min(frameCount - framesWritten, framesRemaining)
+            for channel in 0..<destination.count {
+                guard let dst = destination[channel].mData, let src = source[channel].mData else { continue }
+                memcpy(
+                    dst.advanced(by: Int(framesWritten) * bytesPerFrame),
+                    src.advanced(by: Int(readPosition) * bytesPerFrame),
+                    Int(framesToCopy) * bytesPerFrame
+                )
+            }
+            readPosition += framesToCopy
+            framesWritten += framesToCopy
+            if readPosition >= totalFrames { readPosition = 0 }
+        }
+    }
+
+    private func silence(_ abl: UnsafeMutablePointer<AudioBufferList>) {
+        for buffer in UnsafeMutableAudioBufferListPointer(abl) {
+            if let mData = buffer.mData {
+                memset(mData, 0, Int(buffer.mDataByteSize))
+            }
+        }
+    }
+}
+
+/// Owns the playback graph. Constructs `StutterAudioUnit` directly via its
+/// designated initializer rather than through AudioComponent registration —
+/// this app never needs the OS to discover the effect, since it names the
+/// concrete Swift type itself, so it skips AVAudioUnit/AUAudioUnit's registry
+/// lookup entirely and drives the render block from a plain AVAudioSourceNode.
 @MainActor
 @Observable
 final class AudioEngineController {
     private let engine = AVAudioEngine()
-    private let playerNode = AVAudioPlayerNode()
     private let musicalContext = HostMusicalContext()
 
-    private var effectAudioUnit: AVAudioUnit?
-    private var demoBuffer: AVAudioPCMBuffer?
+    private var stutterAudioUnit: StutterAudioUnit?
+    private var playbackSource: DemoPlaybackSource?
 
     private(set) var isReady = false
     private(set) var isPlaying = false
     private(set) var statusMessage = "Loading effect…"
-    private(set) var extensionViewController: NSViewController?
+    private(set) var stutterViewModel: StutterViewModel?
 
     var bpm: Double = 120 {
         didSet { musicalContext.bpm = bpm }
@@ -36,7 +105,7 @@ final class AudioEngineController {
     }
 
     func play() {
-        guard isReady, let demoBuffer else { return }
+        guard isReady, let playbackSource else { return }
         if !engine.isRunning {
             do {
                 try engine.start()
@@ -46,13 +115,13 @@ final class AudioEngineController {
             }
         }
         musicalContext.reset()
-        playerNode.scheduleBuffer(demoBuffer, at: nil, options: .loops)
-        playerNode.play()
+        playbackSource.reset()
+        playbackSource.isPlaying = true
         isPlaying = true
     }
 
     func stop() {
-        playerNode.stop()
+        playbackSource?.isPlaying = false
         engine.stop()
         musicalContext.stop()
         isPlaying = false
@@ -66,39 +135,40 @@ final class AudioEngineController {
         description.componentFlags = 0
         description.componentFlagsMask = 0
 
-        AVAudioUnit.instantiate(with: description, options: []) { [weak self] avAudioUnit, error in
-            Task { @MainActor in
-                self?.handleInstantiation(avAudioUnit: avAudioUnit, error: error)
-            }
+        do {
+            let stutterAudioUnit = try StutterAudioUnit(componentDescription: description, options: [])
+            try setUpEngine(with: stutterAudioUnit)
+        } catch {
+            statusMessage = "Failed to load effect: \(error.localizedDescription)"
         }
     }
 
-    private func handleInstantiation(avAudioUnit: AVAudioUnit?, error: Error?) {
-        guard let avAudioUnit else {
-            statusMessage = "Failed to load effect: \(error?.localizedDescription ?? "unknown error")"
+    private func setUpEngine(with stutterAudioUnit: StutterAudioUnit) throws {
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+        guard let demoBuffer = Self.makeDemoBuffer(format: format) else {
+            statusMessage = "Failed to build demo buffer"
             return
         }
-        effectAudioUnit = avAudioUnit
 
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
-        demoBuffer = Self.makeDemoBuffer(format: format)
+        stutterAudioUnit.maximumFramesToRender = 4096
+        stutterAudioUnit.musicalContextBlock = musicalContext.makeBlock()
+        try stutterAudioUnit.allocateRenderResources()
+        self.stutterAudioUnit = stutterAudioUnit
 
-        engine.attach(playerNode)
-        engine.attach(avAudioUnit)
-        engine.connect(playerNode, to: avAudioUnit, format: format)
-        engine.connect(avAudioUnit, to: engine.mainMixerNode, format: format)
+        let playbackSource = DemoPlaybackSource(demoBuffer: demoBuffer, renderBlock: stutterAudioUnit.internalRenderBlock)
+        self.playbackSource = playbackSource
+
+        let sourceNode = AVAudioSourceNode(format: format) { isSilence, timestamp, frameCount, audioBufferList in
+            playbackSource.render(isSilence: isSilence, timestamp: timestamp, frameCount: frameCount, audioBufferList: audioBufferList)
+        }
+
+        engine.attach(sourceNode)
+        engine.connect(sourceNode, to: engine.mainMixerNode, format: format)
         engine.prepare()
 
-        avAudioUnit.auAudioUnit.musicalContextBlock = musicalContext.makeBlock()
-
+        stutterViewModel = StutterViewModel(audioUnit: stutterAudioUnit)
         isReady = true
         statusMessage = "Ready"
-
-        avAudioUnit.auAudioUnit.requestViewController { [weak self] viewController in
-            Task { @MainActor in
-                self?.extensionViewController = viewController
-            }
-        }
     }
 
     /// A short, seamlessly-looping plucked-tone arpeggio, generated in code so

@@ -24,6 +24,11 @@ targets:
       - path: MorbidHost
         excludes:
           - "Info.plist"
+      - path: StutterAU
+        excludes:
+          - "Info.plist"
+          - "StutterAU.entitlements"
+          - "StutterViewController.swift"
     info:
       path: MorbidHost/Info.plist
     entitlements:
@@ -51,6 +56,23 @@ targets:
           - "Info.plist"
     info:
       path: StutterAU/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.AudioUnit-UI
+          NSExtensionPrincipalClass: StutterAU.StutterViewController
+          NSExtensionAttributes:
+            AudioComponentBundle: com.morbid.Morbid.StutterAU
+            AudioComponents:
+              - name: "Morbid: Stutter"
+                description: Stutter
+                factoryFunction: StutterAU.StutterViewController
+                manufacturer: Mrbd
+                subtype: Stut
+                type: aufx
+                version: 1
+                sandboxSafe: true
+                tags:
+                  - Effects
     entitlements:
       path: StutterAU/StutterAU.entitlements
     settings:

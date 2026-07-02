@@ -30,8 +30,8 @@ struct ContentView: View {
 
             Divider()
 
-            if let viewController = engineController.extensionViewController {
-                AUViewContainer(viewController: viewController)
+            if let viewModel = engineController.stutterViewModel {
+                StutterView(viewModel: viewModel)
             } else {
                 ProgressView("Loading effect view…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
