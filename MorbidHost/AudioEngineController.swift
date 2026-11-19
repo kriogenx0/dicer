@@ -158,9 +158,7 @@ final class AudioEngineController {
         let playbackSource = DemoPlaybackSource(demoBuffer: demoBuffer, renderBlock: stutterAudioUnit.internalRenderBlock)
         self.playbackSource = playbackSource
 
-        let sourceNode = AVAudioSourceNode(format: format) { isSilence, timestamp, frameCount, audioBufferList in
-            playbackSource.render(isSilence: isSilence, timestamp: timestamp, frameCount: frameCount, audioBufferList: audioBufferList)
-        }
+        let sourceNode = Self.makeSourceNode(format: format, playbackSource: playbackSource)
 
         engine.attach(sourceNode)
         engine.connect(sourceNode, to: engine.mainMixerNode, format: format)
@@ -169,6 +167,18 @@ final class AudioEngineController {
         stutterViewModel = StutterViewModel(audioUnit: stutterAudioUnit)
         isReady = true
         statusMessage = "Ready"
+    }
+
+    /// Built outside the main actor on purpose: a closure formed inside a
+    /// @MainActor method inherits that isolation, and Swift 6 then asserts it
+    /// runs on the main queue, which traps on the realtime render thread.
+    private nonisolated static func makeSourceNode(
+        format: AVAudioFormat,
+        playbackSource: DemoPlaybackSource
+    ) -> AVAudioSourceNode {
+        AVAudioSourceNode(format: format) { isSilence, timestamp, frameCount, audioBufferList in
+            playbackSource.render(isSilence: isSilence, timestamp: timestamp, frameCount: frameCount, audioBufferList: audioBufferList)
+        }
     }
 
     /// A short, seamlessly-looping plucked-tone arpeggio, generated in code so
