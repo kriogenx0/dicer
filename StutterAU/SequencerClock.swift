@@ -15,14 +15,15 @@ struct StepEntry {
 }
 
 /// Tempo-synced step-grid math. Resolves the host's musical context (falling
-/// back to a free-running 120 BPM / 4-4 clock when the host provides none),
+/// back to a free-running clock when the host provides none or the tempo is
+/// set in the plugin),
 /// and converts it into step-grid entry points for a render buffer.
 ///
 /// Stateless with respect to the step grid itself: phase-within-pattern is
 /// always recomputed from the host's beat position, never carried forward
 /// frame-to-frame, so playback stays locked through host seeks and loops.
-/// The only persisted state is the fallback clock, which only advances when
-/// the host provides no musical context at all.
+/// The only persisted state is the free-running clock's beat position, which
+/// is used when the tempo is set in the plugin or the host provides none.
 final class SequencerClock {
     private static let defaultTempo = 120.0
     private static let stepsPerBar = 16
@@ -31,21 +32,25 @@ final class SequencerClock {
     private static let stepsPerBeat = 4.0
 
     private var sampleRate: Double = 44100
-    private var fallbackElapsedSamples: Int64 = 0
+    private var fallbackBeatPosition: Double = 0
 
     func prepare(sampleRate: Double) {
         self.sampleRate = sampleRate
-        fallbackElapsedSamples = 0
+        fallbackBeatPosition = 0
     }
 
     func reset() {
-        fallbackElapsedSamples = 0
+        fallbackBeatPosition = 0
     }
 
     /// Resolves tempo/beat position for this render call. Call exactly once
     /// per render call (or once per host-context-dependent sub-chunk group),
     /// then call `advanceFallback` with the frame count actually rendered.
-    func resolveContext(musicalContextBlock: AUHostMusicalContextBlock?) -> MusicalContext {
+    /// A `manualTempo` (Tempo: Set) overrides the host and runs the free clock.
+    func resolveContext(musicalContextBlock: AUHostMusicalContextBlock?, manualTempo: Double?) -> MusicalContext {
+        if let manualTempo, manualTempo > 0 {
+            return MusicalContext(tempo: manualTempo, beatPosition: fallbackBeatPosition)
+        }
         if let block = musicalContextBlock {
             var tempo: Double = Self.defaultTempo
             var beatPosition: Double = 0
@@ -54,16 +59,14 @@ final class SequencerClock {
                 return MusicalContext(tempo: tempo, beatPosition: beatPosition)
             }
         }
-        let elapsedSeconds = Double(fallbackElapsedSamples) / sampleRate
-        let beatsPerSecond = Self.defaultTempo / 60.0
-        return MusicalContext(tempo: Self.defaultTempo, beatPosition: elapsedSeconds * beatsPerSecond)
+        return MusicalContext(tempo: Self.defaultTempo, beatPosition: fallbackBeatPosition)
     }
 
     /// Must be called once per render call with the frame count actually
-    /// rendered, to advance the fallback clock. A no-op cost when the host is
-    /// providing real musical context, but cheap enough not to bother skipping.
-    func advanceFallback(frameCount: Int) {
-        fallbackElapsedSamples += Int64(frameCount)
+    /// rendered and the tempo it was rendered at, to advance the free clock.
+    /// Unused while the host drives the beat, but cheap enough not to skip.
+    func advanceFallback(frameCount: Int, tempo: Double) {
+        fallbackBeatPosition += Double(frameCount) / sampleRate * tempo / 60.0
     }
 
     private func samplesPerStep(tempo: Double) -> Double {

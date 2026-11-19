@@ -9,11 +9,11 @@ import Foundation
 /// `render` never allocates — it is called from the realtime render thread.
 final class StutterEngine {
     struct Parameters {
-        var speedDivisionIndex: Int
+        /// Length of one repeat, from Rate (Sync or Free).
+        var repeatSeconds: Double
         var gatePercent: Float
         var mix: Float
         var pitchSemitones: Float
-        var tempo: Double
     }
 
     /// A step-sequencer event landing at the start of a render sub-chunk.
@@ -65,13 +65,10 @@ final class StutterEngine {
         isActive = false
     }
 
-    /// Captures the most recent `cycleLength` ring-buffer samples (derived
-    /// from the live Speed parameter and current tempo) as the new frozen
-    /// slice, and resets playback phase. Called only at a step's start.
+    /// Captures the most recent `repeatSeconds` of ring-buffer samples as the
+    /// new frozen slice, and resets playback phase. Called only at a step's start.
     private func beginNewSlice(parameters: Parameters) {
-        let division = SpeedDivision(rawValue: parameters.speedDivisionIndex) ?? .sixteenth
-        let clampedTempo = max(parameters.tempo, 1)
-        let samples = sampleRate * 240.0 * division.noteFraction / clampedTempo
+        let samples = sampleRate * parameters.repeatSeconds
         let sliceLength = max(1, min(Int(samples.rounded()), maxSliceLength))
 
         for c in 0..<channelCount {

@@ -3,56 +3,74 @@ import SwiftUI
 struct StutterView: View {
     let viewModel: StutterViewModel
 
+    private var rateMode: RateMode { viewModel.choice(RateMode.self, at: .rateMode) }
+    private var tempoSource: TempoSource { viewModel.choice(TempoSource.self, at: .tempoSource) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Morbid: Stutter").font(.headline)
 
-            Picker("Speed", selection: speedBinding) {
-                ForEach(SpeedDivision.allCases, id: \.rawValue) { division in
-                    Text(division.displayName).tag(division.rawValue)
-                }
+            // Controls for the mode that isn't in use stay visible but disabled,
+            // so switching modes never moves anything.
+            HStack(spacing: 16) {
+                choicePicker("Rate", RateMode.self, at: .rateMode)
+                    .frame(width: 150)
+                choicePicker("Note Length", SpeedDivision.self, at: .speed)
+                    .disabled(rateMode != .sync)
             }
-            .pickerStyle(.segmented)
+            choicePicker("Tempo", TempoSource.self, at: .tempoSource)
+                .frame(width: 160)
 
-            sliderRow(label: "Gate", value: gateBinding, range: 0...100, valueText: String(format: "%.0f%%", viewModel.gatePercent))
-            sliderRow(label: "Mix", value: mixBinding, range: 0...1, valueText: String(format: "%.0f%%", viewModel.mix * 100))
-            sliderRow(label: "Pitch", value: pitchBinding, range: -24...24, valueText: String(format: "%+.0f st", viewModel.pitchSemitones))
-
-            Picker("Pattern Length", selection: patternLengthBinding) {
-                ForEach(PatternLength.allCases, id: \.rawValue) { length in
-                    Text(length.displayName).tag(length.rawValue)
-                }
+            HStack(spacing: 16) {
+                KnobView(label: "Rate", spec: .rate, value: binding(.rate), disabledText: "Synced")
+                    .disabled(rateMode != .free)
+                KnobView(label: "BPM", spec: .bpm, value: binding(.bpm), disabledText: "Host")
+                    .disabled(tempoSource != .set)
+                KnobView(label: "Gate", spec: .gate, value: binding(.gate))
+                KnobView(label: "Mix", spec: .mix, value: binding(.mix))
+                KnobView(label: "Pitch", spec: .pitch, value: binding(.pitch))
+                triggerButton
             }
-            .pickerStyle(.segmented)
+            .frame(maxWidth: .infinity)
+
+            choicePicker("Pattern Length", PatternLength.self, at: .patternLength)
 
             StepGridView(viewModel: viewModel)
         }
         .padding()
-        .frame(minWidth: 480, minHeight: 380)
+        .frame(minWidth: 620, minHeight: 460)
     }
 
-    private func sliderRow(label: String, value: Binding<Double>, range: ClosedRange<Double>, valueText: String) -> some View {
-        HStack {
-            Text(label).frame(width: 50, alignment: .leading)
-            Slider(value: value, in: range)
-            Text(valueText).frame(width: 56, alignment: .trailing).monospacedDigit()
+    /// Latching: stays on, firing the stutter on every step, until clicked again.
+    private var triggerButton: some View {
+        Toggle(isOn: Binding(
+            get: { viewModel.value(.trigger) >= 0.5 },
+            set: { viewModel.setValue($0 ? 1 : 0, for: .trigger) }
+        )) {
+            Text("Trigger")
+                .font(.headline)
+                .frame(width: 72, height: 44)
         }
+        .toggleStyle(.button)
+        .tint(.red)
+        .help("Stutter on every step until turned off")
+        .accessibilityHint("Stutters on every step, ignoring the pattern, while on")
     }
 
-    private var speedBinding: Binding<Int> {
-        Binding(get: { viewModel.speedIndex }, set: { viewModel.setSpeedIndex($0) })
+    private func choicePicker<Choice: ParameterChoice>(_ label: String, _ type: Choice.Type, at address: ParameterAddress) -> some View {
+        Picker(label, selection: Binding(
+            get: { viewModel.choice(type, at: address).rawValue },
+            set: { viewModel.setValue(Double($0), for: address) }
+        )) {
+            ForEach(Choice.allCases, id: \.rawValue) { option in
+                Text(option.displayName).tag(option.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
     }
-    private var gateBinding: Binding<Double> {
-        Binding(get: { viewModel.gatePercent }, set: { viewModel.setGatePercent($0) })
-    }
-    private var mixBinding: Binding<Double> {
-        Binding(get: { viewModel.mix }, set: { viewModel.setMix($0) })
-    }
-    private var pitchBinding: Binding<Double> {
-        Binding(get: { viewModel.pitchSemitones }, set: { viewModel.setPitchSemitones($0) })
-    }
-    private var patternLengthBinding: Binding<Int> {
-        Binding(get: { viewModel.patternLengthIndex }, set: { viewModel.setPatternLengthIndex($0) })
+
+    private func binding(_ address: ParameterAddress) -> Binding<Double> {
+        Binding(get: { viewModel.value(address) }, set: { viewModel.setValue($0, for: address) })
     }
 }
 

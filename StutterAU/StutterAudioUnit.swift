@@ -25,6 +25,11 @@ final class StutterAudioUnit: AUAudioUnit, @unchecked Sendable {
     private var mixValue: Float = 1
     private var pitchSemitones: Float = 0
     private var patternLengthIndex: Int = PatternLength.oneBar.rawValue
+    private var isTriggerOn = false
+    private var rateModeIndex: Int = RateMode.sync.rawValue
+    private var rateHz: Float = Float(KnobSpec.rate.defaultValue)
+    private var tempoSourceIndex: Int = TempoSource.host.rawValue
+    private var manualBPM: Float = Float(KnobSpec.bpm.defaultValue)
     private var stepStates = [Bool](repeating: false, count: ParameterAddress.maxSteps)
 
     override init(componentDescription: AudioComponentDescription, options: AudioComponentInstantiationOptions = []) throws {
@@ -61,6 +66,16 @@ final class StutterAudioUnit: AUAudioUnit, @unchecked Sendable {
             pitchSemitones = value
         case ParameterAddress.patternLength.rawValue:
             patternLengthIndex = Int(value)
+        case ParameterAddress.trigger.rawValue:
+            isTriggerOn = value >= 0.5
+        case ParameterAddress.rateMode.rawValue:
+            rateModeIndex = Int(value)
+        case ParameterAddress.rate.rawValue:
+            rateHz = value
+        case ParameterAddress.tempoSource.rawValue:
+            tempoSourceIndex = Int(value)
+        case ParameterAddress.bpm.rawValue:
+            manualBPM = value
         default:
             if address >= ParameterAddress.stepBase, address < ParameterAddress.stepBase + AUParameterAddress(ParameterAddress.maxSteps) {
                 stepStates[Int(address - ParameterAddress.stepBase)] = value >= 0.5
@@ -80,6 +95,16 @@ final class StutterAudioUnit: AUAudioUnit, @unchecked Sendable {
             return pitchSemitones
         case ParameterAddress.patternLength.rawValue:
             return AUValue(patternLengthIndex)
+        case ParameterAddress.trigger.rawValue:
+            return isTriggerOn ? 1 : 0
+        case ParameterAddress.rateMode.rawValue:
+            return AUValue(rateModeIndex)
+        case ParameterAddress.rate.rawValue:
+            return rateHz
+        case ParameterAddress.tempoSource.rawValue:
+            return AUValue(tempoSourceIndex)
+        case ParameterAddress.bpm.rawValue:
+            return manualBPM
         default:
             if address >= ParameterAddress.stepBase, address < ParameterAddress.stepBase + AUParameterAddress(ParameterAddress.maxSteps) {
                 return stepStates[Int(address - ParameterAddress.stepBase)] ? 1 : 0
@@ -158,7 +183,8 @@ final class StutterAudioUnit: AUAudioUnit, @unchecked Sendable {
         let frameCountInt = Int(frameCount)
 
         let patternLength = PatternLength(rawValue: patternLengthIndex) ?? .oneBar
-        let context = clock.resolveContext(musicalContextBlock: cachedMusicalContextBlock)
+        let manualTempo = TempoSource(rawValue: tempoSourceIndex) == .set ? Double(manualBPM) : nil
+        let context = clock.resolveContext(musicalContextBlock: cachedMusicalContextBlock, manualTempo: manualTempo)
         let stepEntries = clock.stepEntries(context: context, patternLength: patternLength, frameCount: frameCountInt)
         var stepIndexByOffset: [Int: Int] = [:]
         for entry in stepEntries { stepIndexByOffset[entry.sampleOffset] = entry.stepIndex }
@@ -194,13 +220,17 @@ final class StutterAudioUnit: AUAudioUnit, @unchecked Sendable {
             let subFrameCount = end - start
             guard subFrameCount > 0 else { continue }
 
-            let stepTrigger = stepIndexByOffset[start].map { StutterEngine.StepTrigger(isOn: stepStates[$0]) }
+            let stepTrigger = stepIndexByOffset[start].map { StutterEngine.StepTrigger(isOn: isTriggerOn || stepStates[$0]) }
             let parameters = StutterEngine.Parameters(
-                speedDivisionIndex: speedIndex,
+                repeatSeconds: RateMode.repeatSeconds(
+                    mode: RateMode(rawValue: rateModeIndex) ?? .sync,
+                    division: SpeedDivision(rawValue: speedIndex) ?? .sixteenth,
+                    tempo: context.tempo,
+                    rateHz: Double(rateHz)
+                ),
                 gatePercent: gatePercent,
                 mix: mixValue,
-                pitchSemitones: pitchSemitones,
-                tempo: context.tempo
+                pitchSemitones: pitchSemitones
             )
             engine.render(
                 inputBuffers: inputBuffers,
@@ -212,7 +242,7 @@ final class StutterAudioUnit: AUAudioUnit, @unchecked Sendable {
             )
         }
 
-        clock.advanceFallback(frameCount: frameCountInt)
+        clock.advanceFallback(frameCount: frameCountInt, tempo: context.tempo)
         return noErr
     }
 }

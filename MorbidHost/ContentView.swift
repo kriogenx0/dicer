@@ -37,7 +37,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .frame(minWidth: 520, minHeight: 480)
+        .frame(minWidth: 660, minHeight: 560)
         .onAppear {
             engineController.start()
         }
