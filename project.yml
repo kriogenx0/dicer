@@ -63,7 +63,7 @@ targets:
           NSExtensionAttributes:
             AudioComponentBundle: com.morbid.Morbid.StutterAU
             AudioComponents:
-              - name: "Morbid: Stutter"
+              - name: "Perfect Ink: Morbid Stutter"
                 description: Stutter
                 factoryFunction: StutterAU.StutterViewController
                 manufacturer: Mrbd
