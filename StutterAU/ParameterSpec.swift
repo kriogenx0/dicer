@@ -1,5 +1,6 @@
 import AudioToolbox
 import Foundation
+import VoltaNative
 
 /// Stable parameter addresses. Never derive these from array index — hosts may
 /// persist automation by address across sessions.
@@ -129,66 +130,10 @@ enum TempoSource: Int, ParameterChoice {
     }
 }
 
-/// Range, default and display format for a continuous parameter. The
+/// Range, default and display format for each continuous parameter. The
 /// parameter tree and the knob both read from here, so they can't disagree.
-struct KnobSpec {
-    let range: ClosedRange<Double>
-    let defaultValue: Double
-    /// Arrow-key and scroll step, in parameter units. Logarithmic knobs step
-    /// by 1% of their travel instead.
-    let step: Double
-    /// Multiplier from parameter units to display units (0...1 shown as 0...100%).
-    let displayScale: Double
-    let unitSuffix: String
-    let showsSign: Bool
-    /// Frequency-like ranges spread evenly by ratio, so the low end isn't cramped.
-    var isLogarithmic = false
-
-    private static let logarithmicStep = 0.01
-
-    /// Bipolar knobs fill their arc from the center.
-    var isBipolar: Bool { range.lowerBound < 0 && range.upperBound > 0 }
-
-    func clamped(_ value: Double) -> Double {
-        min(max(value, range.lowerBound), range.upperBound)
-    }
-
-    /// Position along the knob's travel, 0...1.
-    func normalized(_ value: Double) -> Double {
-        let low = range.lowerBound, high = range.upperBound
-        guard high > low else { return 0 }
-        if isLogarithmic { return log(clamped(value) / low) / log(high / low) }
-        return (clamped(value) - low) / (high - low)
-    }
-
-    func value(atNormalized position: Double) -> Double {
-        let position = min(max(position, 0), 1)
-        let low = range.lowerBound, high = range.upperBound
-        if isLogarithmic { return low * pow(high / low, position) }
-        return low + position * (high - low)
-    }
-
-    /// `value` moved by `steps` arrow-key steps.
-    func stepped(_ value: Double, by steps: Double) -> Double {
-        if isLogarithmic { return self.value(atNormalized: normalized(value) + steps * Self.logarithmicStep) }
-        return clamped(value + steps * step)
-    }
-
-    func format(_ value: Double) -> String {
-        let shown = value * displayScale
-        let isWhole = abs(shown - shown.rounded()) < 0.05
-        let number = String(format: "%\(showsSign && shown.rounded() != 0 ? "+" : "").\(isWhole ? 0 : 1)f", isWhole ? shown.rounded() : shown)
-        return number + unitSuffix
-    }
-
-    /// Accepts typed text with or without units ("50%", "50", "+3 st").
-    /// Returns nil when there's no number, so the value stays unchanged.
-    func parse(_ text: String) -> Double? {
-        let numeric = text.filter { "0123456789.-+".contains($0) }
-        guard let shown = Double(numeric) else { return nil }
-        return clamped(shown / displayScale)
-    }
-
+/// `KnobSpec` itself (clamping, log mapping, formatting, parsing) lives in VoltaNative.
+extension KnobSpec {
     static let gate = KnobSpec(range: 0...100, defaultValue: 100, step: 1, displayScale: 1, unitSuffix: "%", showsSign: false)
     static let mix = KnobSpec(range: 0...1, defaultValue: 1, step: 0.01, displayScale: 100, unitSuffix: "%", showsSign: false)
     static let pitch = KnobSpec(range: -24...24, defaultValue: 0, step: 1, displayScale: 1, unitSuffix: " st", showsSign: true)

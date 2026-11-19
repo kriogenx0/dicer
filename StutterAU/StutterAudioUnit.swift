@@ -1,5 +1,6 @@
 import AudioToolbox
 import AVFoundation
+import VoltaNative
 
 // Accessed from both the render thread (internalRenderBlock) and the main
 // thread (parameter tree observers, view controller); safe by construction —
