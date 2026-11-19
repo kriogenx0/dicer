@@ -5,6 +5,12 @@ options:
     macOS: "14.0"
   createIntermediateGroups: true
 
+packages:
+  # Shared Perfect Ink look (tokens, controls, knob), from kriogenx0/volta-native.
+  VoltaNative:
+    url: https://github.com/kriogenx0/volta-native
+    branch: main
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -45,6 +51,8 @@ targets:
       - target: StutterAU
         embed: true
         codeSign: true
+      # MorbidHost compiles the StutterAU sources too, so it needs the package as well.
+      - package: VoltaNative
 
   StutterAU:
     type: app-extension
@@ -73,6 +81,8 @@ targets:
                 sandboxSafe: true
                 tags:
                   - Effects
+    dependencies:
+      - package: VoltaNative
     entitlements:
       path: StutterAU/StutterAU.entitlements
     settings:

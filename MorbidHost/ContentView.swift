@@ -1,4 +1,5 @@
 import SwiftUI
+import VoltaNative
 
 struct ContentView: View {
     @State private var engineController = AudioEngineController()
@@ -13,6 +14,7 @@ struct ContentView: View {
                         engineController.play()
                     }
                 }
+                .buttonStyle(.voltaProminent)
                 .disabled(!engineController.isReady)
 
                 Stepper(value: bpmBinding, in: 40...240, step: 1) {
@@ -27,8 +29,9 @@ struct ContentView: View {
                     .font(.caption)
             }
             .padding()
+            .voltaControls()
 
-            Divider()
+            VoltaDivider()
 
             if let viewModel = engineController.stutterViewModel {
                 StutterView(viewModel: viewModel)
