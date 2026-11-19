@@ -1,6 +1,6 @@
 name: Morbid
 options:
-  bundleIdPrefix: com.morbid
+  bundleIdPrefix: org.perfectink
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -35,7 +35,7 @@ targets:
       path: MorbidHost/MorbidHost.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.morbid.Morbid
+        PRODUCT_BUNDLE_IDENTIFIER: org.perfectink.morbid
         PRODUCT_NAME: Morbid
         CODE_SIGN_ENTITLEMENTS: MorbidHost/MorbidHost.entitlements
         MARKETING_VERSION: "1.0"
@@ -61,7 +61,7 @@ targets:
           NSExtensionPointIdentifier: com.apple.AudioUnit-UI
           NSExtensionPrincipalClass: StutterAU.StutterViewController
           NSExtensionAttributes:
-            AudioComponentBundle: com.morbid.Morbid.StutterAU
+            AudioComponentBundle: org.perfectink.morbid.StutterAU
             AudioComponents:
               - name: "Perfect Ink: Morbid Stutter"
                 description: Stutter
@@ -77,7 +77,7 @@ targets:
       path: StutterAU/StutterAU.entitlements
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.morbid.Morbid.StutterAU
+        PRODUCT_BUNDLE_IDENTIFIER: org.perfectink.morbid.StutterAU
         PRODUCT_NAME: StutterAU
         CODE_SIGN_ENTITLEMENTS: StutterAU/StutterAU.entitlements
         SKIP_INSTALL: false

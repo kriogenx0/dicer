@@ -23,7 +23,7 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>AudioComponentBundle</key>
-			<string>com.morbid.Morbid.StutterAU</string>
+			<string>org.perfectink.morbid.StutterAU</string>
 			<key>AudioComponents</key>
 			<array>
 				<dict>
