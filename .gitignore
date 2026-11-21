@@ -5,6 +5,7 @@ Morbid.xcodeproj/
 # Xcode user/build state
 xcuserdata/
 DerivedData/
+build/
 *.moved-aside
 *.xccheckout
 *.xcscmblueprint
