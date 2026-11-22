@@ -4,7 +4,7 @@ Dicer's Stutter view and the Morbid host app use the shared Perfect Ink look fro
 
 ## What uses it
 
-- **Knobs:** `VoltaKnob` (drag up or down, Option for fine, scroll, arrow keys, double-click to reset, click the value to type one). Each knob reads its range, default and format from a `KnobSpec` preset in `StutterAU/ParameterSpec.swift` (`.rate`, `.bpm`, `.gate`, `.mix`, `.pitch`). The parameter tree reads the same presets.
+- **Knobs:** `VoltaKnob` (drag up or down, Option for fine, arrow keys, double-click to reset, click the value to type one). Each knob reads its range, default and format from a `KnobSpec` preset in `StutterAU/ParameterSpec.swift` (`.rate`, `.bpm`, `.gate`, `.mix`, `.pitch`). The parameter tree reads the same presets.
 - **Trigger:** a quiet bordered button while off, the accent-filled primary action while latched on (`TriggerToggleStyle` in `StutterView.swift`).
 - **Step grid:** steps that are on show the accent, steps that are off show a faint fill, and hovering a step outlines it.
 - **Host app:** Play is the primary action. The toolbar uses `.voltaControls()` and a `VoltaDivider`.
